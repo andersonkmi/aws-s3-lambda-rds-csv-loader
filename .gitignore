@@ -1,3 +1,5 @@
 app/aws-s3-lambda-rds-csv-loader.iml
 app/.idea/
 app/target/
+*.properties
+app/src/main/resources/lambda.properties
