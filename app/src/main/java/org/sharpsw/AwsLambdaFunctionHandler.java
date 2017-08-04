@@ -1,6 +1,5 @@
 package org.sharpsw;
 
-import au.com.bytecode.opencsv.CSVReader;
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.LambdaLogger;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
@@ -10,11 +9,16 @@ import com.amazonaws.services.s3.AmazonS3ClientBuilder;
 import com.amazonaws.services.s3.event.S3EventNotification;
 import com.amazonaws.services.s3.model.GetObjectRequest;
 import com.amazonaws.services.s3.model.S3Object;
+import org.sharpsw.data.DataLoader;
+import org.sharpsw.data.DatabaseConnectionBuilder;
+import org.sharpsw.data.ItemDataLoader;
 
 import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.URLDecoder;
+import java.sql.Connection;
+import java.sql.SQLException;
 import java.util.Properties;
 
 public class AwsLambdaFunctionHandler implements RequestHandler<S3Event, Report> {
@@ -26,6 +30,7 @@ public class AwsLambdaFunctionHandler implements RequestHandler<S3Event, Report>
         LambdaLogger logger = context.getLogger();
 
         logger.log("Lambda Function Started");
+        Connection connection = null;
 
         try {
             InputStream is = AwsLambdaFunctionHandler.class.getResourceAsStream("/lambda.properties");
@@ -43,25 +48,36 @@ public class AwsLambdaFunctionHandler implements RequestHandler<S3Event, Report>
             statusReport.setFileSize(s3Object.getObjectMetadata().getContentLength());
 
             logger.log("S3 Event Received: " + srcBucket + "/" + srcKey);
+            DataLoader loader = null;
+            if(srcKey.contains("item.csv")) {
+                loader = new ItemDataLoader();
+            }
 
             InputStreamReader isr = new InputStreamReader(s3Object.getObjectContent());
             BufferedReader br = new BufferedReader(isr);
 
-            DBLoader loader = new DBLoader(properties.getProperty("DB_SERVER"), properties.getProperty("DB_USER"), properties.getProperty("DB_PASSWORD"), properties.getProperty("DB_NAME"), logger);
-            loader.createConnection();
+            DatabaseConnectionBuilder builder = new DatabaseConnectionBuilder();
+            connection = builder.getConnection(properties.getProperty("DB_SERVER"), properties.getProperty("DB_USER"), properties.getProperty("DB_PASSWORD"), properties.getProperty("DB_NAME"));
 
             int lineNum = 0;
             String line = null;
             while ((line = br.readLine()) != null) {
                 if(lineNum > 0) {
                     //logger.log("Line: " + line);
-                    loader.load("");
+                    loader.load(connection, line);
                 }
                 lineNum++;
             }
-            loader.closeConnection();
         } catch (Exception exception) {
             logger.log(exception.getMessage());
+        } finally {
+            if(connection != null) {
+                try {
+                    connection.close();
+                } catch (SQLException exception) {
+                    logger.log(exception.getMessage());
+                }
+            }
         }
 
         statusReport.setExecutiongTime(System.currentTimeMillis() - startTime);
