@@ -51,6 +51,9 @@ public class AwsLambdaFunctionHandler implements RequestHandler<S3Event, Report>
             DataLoader loader = null;
             if(srcKey.contains("item.csv")) {
                 loader = new ItemDataLoader();
+            } else if(srcKey.contains("fabricante.csv")) {
+                statusReport.setExecutiongTime(System.currentTimeMillis() - startTime);
+                return statusReport;
             }
 
             InputStreamReader isr = new InputStreamReader(s3Object.getObjectContent());
@@ -63,7 +66,6 @@ public class AwsLambdaFunctionHandler implements RequestHandler<S3Event, Report>
             String line = null;
             while ((line = br.readLine()) != null) {
                 if(lineNum > 0) {
-                    //logger.log("Line: " + line);
                     loader.load(connection, line);
                 }
                 lineNum++;
